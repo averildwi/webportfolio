@@ -1,0 +1,10 @@
+# dependencies
+node_modules
+.pnpm-store
+
+# turbo
+.turbo
+
+# build outputs
+dist
+.next
