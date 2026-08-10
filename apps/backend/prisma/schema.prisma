@@ -1,8 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
   provider     = "prisma-client"
   output       = "../generated/prisma"
@@ -12,3 +7,240 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+enum TechCategory {
+  FRONTEND
+  BACKEND
+  DATABASE
+  DEVOPS
+  MOBILE
+  OTHER
+}
+
+enum ProjectStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum DocType {
+  IMAGE
+  PDF
+}
+
+enum AvailabilityStatus {
+  OPEN_TO_WORK
+  FREELANCE_ONLY
+  NOT_AVAILABLE
+  EMPLOYED
+}
+
+enum ContactStatus {
+  UNREAD
+  READ
+  REPLIED
+}
+
+enum GuestbookStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum AuthProvider {
+  GOOGLE
+  GITHUB
+}
+
+model Admin {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+}
+
+model SiteConfig {
+  id                 String             @id @default(uuid())
+  fullName           String
+  tagline            String?
+  bio                String?            @db.Text
+  avatarUrl          String?
+  resumeUrl          String?
+  availabilityStatus AvailabilityStatus @default(OPEN_TO_WORK)
+  socialLinks        Json? // { github, linkedin, instagram, twitter, email }
+  updatedAt          DateTime           @updatedAt
+}
+
+model TechStack {
+  id        String       @id @default(uuid())
+  name      String
+  iconUrl   String?
+  category  TechCategory
+  order     Int          @default(0)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  projects    ProjectTech[]
+  experiences ExperienceTech[]
+
+  @@index([category])
+}
+
+model Project {
+  id           String        @id @default(uuid())
+  title        String
+  slug         String        @unique
+  description  String
+  longDesc     String?       @db.Text
+  thumbnailUrl String?
+  liveUrl      String?
+  repoUrl      String?
+  status       ProjectStatus @default(DRAFT)
+  featured     Boolean       @default(false)
+  viewCount    Int           @default(0)
+  likeCount    Int           @default(0)
+  order        Int           @default(0)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  techStacks ProjectTech[]
+  docs       ProjectDoc[]
+
+  @@index([status])
+  @@index([featured])
+  @@index([slug])
+}
+
+model ProjectTech {
+  projectId   String
+  techStackId String
+
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  techStack TechStack @relation(fields: [techStackId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, techStackId])
+}
+
+model ProjectDoc {
+  id        String   @id @default(uuid())
+  projectId String
+  title     String?
+  url       String
+  type      DocType  @default(IMAGE)
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model Experience {
+  id          String    @id @default(uuid())
+  company     String
+  role        String
+  description String?   @db.Text
+  startDate   DateTime
+  endDate     DateTime? // null = masih bekerja
+  order       Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  techStacks ExperienceTech[]
+}
+
+model ExperienceTech {
+  experienceId String
+  techStackId  String
+
+  experience Experience @relation(fields: [experienceId], references: [id], onDelete: Cascade)
+  techStack  TechStack  @relation(fields: [techStackId], references: [id], onDelete: Cascade)
+
+  @@id([experienceId, techStackId])
+}
+
+model Education {
+  id           String    @id @default(uuid())
+  institution  String
+  degree       String
+  fieldOfStudy String
+  startDate    DateTime
+  endDate      DateTime?
+  description  String?   @db.Text
+  order        Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model Achievement {
+  id             String   @id @default(uuid())
+  title          String
+  description    String?  @db.Text
+  issuer         String?
+  date           DateTime
+  certificateUrl String?
+  featured       Boolean  @default(false)
+  order          Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([featured])
+}
+
+model Testimonial {
+  id        String   @id @default(uuid())
+  name      String
+  role      String?
+  company   String?
+  message   String   @db.Text
+  avatarUrl String?
+  featured  Boolean  @default(false)
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([featured])
+}
+
+model ContactForm {
+  id        String        @id @default(uuid())
+  name      String
+  email     String
+  company   String?
+  subject   String
+  message   String        @db.Text
+  status    ContactStatus @default(UNREAD)
+  createdAt DateTime      @default(now())
+  readAt    DateTime?
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Visitor {
+  id         String       @id @default(uuid())
+  provider   AuthProvider
+  providerId String
+  name       String
+  email      String?
+  avatarUrl  String?
+  createdAt  DateTime     @default(now())
+
+  messages Guestbook[]
+
+  @@unique([provider, providerId])
+}
+
+model Guestbook {
+  id        String          @id @default(uuid())
+  visitorId String
+  message   String          @db.Text
+  status    GuestbookStatus @default(PENDING)
+  createdAt DateTime        @default(now())
+
+  visitor Visitor @relation(fields: [visitorId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([createdAt])
+}
+
