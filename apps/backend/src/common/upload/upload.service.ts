@@ -1,3 +1,4 @@
+/// <reference types="multer" />
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { v2 as cloudinary, UploadApiResponse } from 'cloudinary';
@@ -74,7 +75,12 @@ export class UploadService {
     };
   }
 
-  async deleteFile(publicId: string, resourceType: string = 'image'): Promise<void> {
-    await cloudinary.uploader.destroy(publicId, { resource_type: resourceType });
+  async deleteFile(
+    publicId: string,
+    resourceType: string = 'image',
+  ): Promise<void> {
+    await cloudinary.uploader.destroy(publicId, {
+      resource_type: resourceType,
+    });
   }
 }

@@ -5,6 +5,7 @@ import { AppService } from './app.service';
 import { AppConfigModule } from './common/config/app-config.module';
 import { HashingModule } from './common/hashing/hashing.module';
 import { UploadModule } from './common/upload/upload.module';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
@@ -12,6 +13,7 @@ import { UploadModule } from './common/upload/upload.module';
     HashingModule,
     PrismaModule,
     UploadModule,
+    AuthModule,
   ],
   controllers: [AppController],
   providers: [AppService],

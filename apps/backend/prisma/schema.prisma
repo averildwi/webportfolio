@@ -105,6 +105,7 @@ model Project {
 
   techStacks ProjectTech[]
   docs       ProjectDoc[]
+  likes      ProjectLike[]
 
   @@index([status])
   @@index([featured])
@@ -132,6 +133,18 @@ model ProjectDoc {
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
+  @@index([projectId])
+}
+
+model ProjectLike {
+  id        String   @id @default(uuid())
+  projectId String
+  hash      String
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, hash])
   @@index([projectId])
 }
 

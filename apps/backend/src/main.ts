@@ -1,5 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { ExpressAdapter } from '@nestjs/platform-express';
+import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 import { createValidationPipe } from './common/pipes/validation.pipe.config';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
@@ -11,14 +12,19 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, new ExpressAdapter());
 
-  // ── Injected by @averildwi/nest-common ──
+  app.use(cookieParser());
+
   const allowedOrigins = process.env.FRONTEND_URL
-    ? process.env.FRONTEND_URL.split(',')
+    ? process.env.FRONTEND_URL.split(',').map((url) => url.trim())
     : '*';
   app.enableCors({
     origin: allowedOrigins,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    credentials: true,
   });
+
+  app.setGlobalPrefix('api');
+
   app.useGlobalPipes(createValidationPipe());
   app.useGlobalInterceptors(
     new LoggerInterceptor(),
@@ -30,8 +36,8 @@ async function bootstrap() {
   );
 
   const config = new DocumentBuilder()
-    .setTitle('My API')
-    .setDescription('API documentation')
+    .setTitle('Web Portfolio API')
+    .setDescription("API documentation for Averil's Web Portfolio")
     .setVersion('1.0')
     .addBearerAuth(
       {
