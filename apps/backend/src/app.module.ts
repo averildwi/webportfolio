@@ -9,6 +9,8 @@ import { UploadModule } from './common/upload/upload.module';
 import { AuthModule } from './auth/auth.module';
 import { SiteConfigModule } from './site-config/site-config.module';
 import { TechStackModule } from './tech-stack/tech-stack.module';
+import { ExperiencesModule } from './experiences/experiences.module';
+import { EducationsModule } from './educations/educations.module';
 
 @Module({
   imports: [
@@ -23,6 +25,8 @@ import { TechStackModule } from './tech-stack/tech-stack.module';
     AuthModule,
     SiteConfigModule,
     TechStackModule,
+    ExperiencesModule,
+    EducationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
