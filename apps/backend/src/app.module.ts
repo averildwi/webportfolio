@@ -8,6 +8,7 @@ import { HashingModule } from './common/hashing/hashing.module';
 import { UploadModule } from './common/upload/upload.module';
 import { AuthModule } from './auth/auth.module';
 import { SiteConfigModule } from './site-config/site-config.module';
+import { TechStackModule } from './tech-stack/tech-stack.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { SiteConfigModule } from './site-config/site-config.module';
     UploadModule,
     AuthModule,
     SiteConfigModule,
+    TechStackModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -35,12 +35,8 @@ export class AuthService {
     this.refreshTokenExpiresIn =
       this.configService.get<string>('JWT_REFRESH_EXPIRES_IN') || '7d';
 
-    // Wajib di-set terpisah dari JWT_SECRET — lihat base-env.schema.ts
-    // (Joi required). Tidak ada fallback derived dari JWT_SECRET karena
-    // itu bikin refresh secret bisa ditebak kalau JWT_SECRET bocor.
-    this.refreshSecret = this.configService.getOrThrow<string>(
-      'JWT_REFRESH_SECRET',
-    );
+    this.refreshSecret =
+      this.configService.getOrThrow<string>('JWT_REFRESH_SECRET');
 
     const frontendUrl =
       this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
@@ -119,12 +115,8 @@ export class AuthService {
         { secret: this.refreshSecret },
       );
     } catch (err) {
-      this.logger.warn(
-        `Refresh token verify gagal: ${(err as Error).message}`,
-      );
-      throw new UnauthorizedException(
-        'Refresh token tidak valid atau expired',
-      );
+      this.logger.warn(`Refresh token verify gagal: ${(err as Error).message}`);
+      throw new UnauthorizedException('Refresh token tidak valid atau expired');
     }
 
     if (payload.type !== 'refresh') {

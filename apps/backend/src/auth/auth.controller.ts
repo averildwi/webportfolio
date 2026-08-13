@@ -125,8 +125,7 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const accessToken = req.cookies?.['oauth_access_token'] as
-      | string
-      | undefined;
+      string | undefined;
 
     res.clearCookie('oauth_access_token', this.cookieBaseOptions());
 
@@ -164,7 +163,7 @@ export class AuthController {
     return res.redirect(`${frontendUrl}/guestbook?oauth=success`);
   }
 
-  private cookieBaseOptions() {
+  private cookieBaseOptions(): any {
     return {
       httpOnly: true,
       secure: this.isProduction,
