@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
@@ -15,9 +15,12 @@ import { randomBytes } from 'node:crypto';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   private readonly dummyHash: string;
   private readonly accessTokenExpiresIn: string;
   private readonly refreshTokenExpiresIn: string;
+  private readonly refreshSecret: string;
   private readonly allowedRedirectOrigins: string[];
 
   constructor(
@@ -31,6 +34,13 @@ export class AuthService {
       this.configService.get<string>('JWT_EXPIRES_IN') || '15m';
     this.refreshTokenExpiresIn =
       this.configService.get<string>('JWT_REFRESH_EXPIRES_IN') || '7d';
+
+    // Wajib di-set terpisah dari JWT_SECRET — lihat base-env.schema.ts
+    // (Joi required). Tidak ada fallback derived dari JWT_SECRET karena
+    // itu bikin refresh secret bisa ditebak kalau JWT_SECRET bocor.
+    this.refreshSecret = this.configService.getOrThrow<string>(
+      'JWT_REFRESH_SECRET',
+    );
 
     const frontendUrl =
       this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
@@ -101,48 +111,54 @@ export class AuthService {
   }
 
   async refreshTokens(refreshToken: string) {
+    let payload: JwtPayload & { type: string };
+
     try {
-      const payload = this.jwtService.verify<JwtPayload & { type: string }>(
+      payload = this.jwtService.verify<JwtPayload & { type: string }>(
         refreshToken,
-        {
-          secret:
-            this.configService.get<string>('JWT_REFRESH_SECRET') ||
-            this.configService.get<string>('JWT_SECRET') + '_refresh',
-        },
+        { secret: this.refreshSecret },
       );
-
-      if (payload.type !== 'refresh') {
-        throw new UnauthorizedException('Token tidak valid');
-      }
-
-      if (payload.role === 'ADMIN') {
-        const admin = await this.prisma.admin.findUnique({
-          where: { id: payload.sub },
-          select: { id: true, email: true },
-        });
-        if (!admin) throw new UnauthorizedException('Sesi admin tidak valid');
-
-        return this.generateTokenPair({
-          sub: admin.id,
-          email: admin.email,
-          role: 'ADMIN',
-        });
-      }
-
-      if (payload.role === 'VISITOR') {
-        const visitor = await this.prisma.visitor.findUnique({
-          where: { id: payload.sub },
-        });
-        if (!visitor)
-          throw new UnauthorizedException('Sesi visitor tidak valid');
-
-        return this.generateTokenPair({ sub: visitor.id, role: 'VISITOR' });
-      }
-
-      throw new UnauthorizedException('Role token tidak dikenali');
-    } catch {
-      throw new UnauthorizedException('Refresh token tidak valid atau expired');
+    } catch (err) {
+      this.logger.warn(
+        `Refresh token verify gagal: ${(err as Error).message}`,
+      );
+      throw new UnauthorizedException(
+        'Refresh token tidak valid atau expired',
+      );
     }
+
+    if (payload.type !== 'refresh') {
+      this.logger.warn(
+        `Refresh token dengan type tidak valid: ${payload.type}`,
+      );
+      throw new UnauthorizedException('Token tidak valid');
+    }
+
+    if (payload.role === 'ADMIN') {
+      const admin = await this.prisma.admin.findUnique({
+        where: { id: payload.sub },
+        select: { id: true, email: true },
+      });
+      if (!admin) throw new UnauthorizedException('Sesi admin tidak valid');
+
+      return this.generateTokenPair({
+        sub: admin.id,
+        email: admin.email,
+        role: 'ADMIN',
+      });
+    }
+
+    if (payload.role === 'VISITOR') {
+      const visitor = await this.prisma.visitor.findUnique({
+        where: { id: payload.sub },
+      });
+      if (!visitor) throw new UnauthorizedException('Sesi visitor tidak valid');
+
+      return this.generateTokenPair({ sub: visitor.id, role: 'VISITOR' });
+    }
+
+    this.logger.warn(`Role token tidak dikenali: ${payload.role}`);
+    throw new UnauthorizedException('Role token tidak dikenali');
   }
 
   async getAdminProfile(userId: string): Promise<AdminPayload> {
@@ -186,9 +202,7 @@ export class AuthService {
       { sub: payload.sub, role: payload.role, type: 'refresh' },
       {
         expiresIn: this.refreshTokenExpiresIn as any,
-        secret:
-          this.configService.get<string>('JWT_REFRESH_SECRET') ||
-          this.configService.get<string>('JWT_SECRET') + '_refresh',
+        secret: this.refreshSecret,
       },
     );
 
