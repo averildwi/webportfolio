@@ -20,7 +20,10 @@ export class AppThrottlerGuard extends ThrottlerGuard {
     }
 
     // Guestbook POST → basis Visitor (sub dari JWT), fallback IP
-    if (url.includes('/guestbook') && (req.method ?? '').toUpperCase() === 'POST') {
+    if (
+      url.includes('/guestbook') &&
+      (req.method ?? '').toUpperCase() === 'POST'
+    ) {
       const visitorId = this.extractVisitorId(req);
       if (visitorId) return `visitor-${visitorId}`;
     }

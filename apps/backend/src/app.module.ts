@@ -3,8 +3,6 @@ import { Module } from '@nestjs/common';
 import { CacheModule } from '@nestjs/cache-manager';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerModule, seconds } from '@nestjs/throttler';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
 import { AppConfigModule } from './common/config/app-config.module';
 import { HashingModule } from './common/hashing/hashing.module';
 import { UploadModule } from './common/upload/upload.module';
@@ -19,6 +17,7 @@ import { AchievementsModule } from './achievements/achievements.module';
 import { TestimonialsModule } from './testimonials/testimonials.module';
 import { ContactModule } from './contact/contact.module';
 import { GuestbookModule } from './guestbook/guestbook.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -37,6 +36,7 @@ import { GuestbookModule } from './guestbook/guestbook.module';
     HashingModule,
     PrismaModule,
     UploadModule,
+    HealthModule,
     AuthModule,
     SiteConfigModule,
     TechStackModule,
@@ -48,13 +48,12 @@ import { GuestbookModule } from './guestbook/guestbook.module';
     ContactModule,
     GuestbookModule,
   ],
-  controllers: [AppController],
+  controllers: [],
   providers: [
-    AppService,
     {
       provide: APP_GUARD,
       useClass: AppThrottlerGuard,
     },
   ],
 })
-export class AppModule {}
+export class AppModule { }
