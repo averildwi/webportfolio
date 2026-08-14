@@ -167,7 +167,7 @@ export class AuthController {
     return {
       httpOnly: true,
       secure: this.isProduction,
-      sameSite: (this.isProduction ? 'strict' : 'lax') as 'strict' | 'lax',
+      sameSite: this.isProduction ? 'strict' : 'lax',
       path: '/api/auth',
     };
   }

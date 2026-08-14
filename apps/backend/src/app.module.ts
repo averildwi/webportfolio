@@ -11,6 +11,7 @@ import { SiteConfigModule } from './site-config/site-config.module';
 import { TechStackModule } from './tech-stack/tech-stack.module';
 import { ExperiencesModule } from './experiences/experiences.module';
 import { EducationsModule } from './educations/educations.module';
+import { ProjectsModule } from './projects/projects.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { EducationsModule } from './educations/educations.module';
     TechStackModule,
     ExperiencesModule,
     EducationsModule,
+    ProjectsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -32,11 +32,15 @@ export class SiteConfigService {
       throw new NotFoundException('Site config belum diinisialisasi');
     }
 
+    const { socialLinks, ...rest } = dto;
+
     const updated = await this.prisma.siteConfig.update({
       where: { id: current.id },
       data: {
-        ...dto,
-        socialLinks: dto.socialLinks as object | undefined,
+        ...rest,
+        ...(socialLinks !== undefined && {
+          socialLinks: socialLinks as object,
+        }),
       },
     });
 

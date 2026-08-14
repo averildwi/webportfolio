@@ -43,7 +43,10 @@ export class CreateExperienceDto {
   @IsDateString()
   endDate?: string;
 
-  @ApiPropertyOptional({ type: [String], description: 'Array of TechStack IDs' })
+  @ApiPropertyOptional({
+    type: [String],
+    description: 'Array of TechStack IDs',
+  })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })

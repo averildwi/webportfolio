@@ -13,10 +13,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { MessageResponse } from '../common/interceptors/transform.interceptor';
-import {
-  CreateExperienceDto,
-  UpdateExperienceDto,
-} from './dto/experience.dto';
+import { CreateExperienceDto, UpdateExperienceDto } from './dto/experience.dto';
 import { ExperiencesService } from './experiences.service';
 
 @ApiTags('Experiences')
