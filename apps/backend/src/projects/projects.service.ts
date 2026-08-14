@@ -19,7 +19,7 @@ export class ProjectsService {
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
   ) {}
 
-  // ── Public: List (paginated) ────────────────────────────────
+  // Public: List (paginated)
   async findAll(options?: {
     featured?: boolean;
     status?: ProjectStatus;
@@ -76,7 +76,7 @@ export class ProjectsService {
     return result;
   }
 
-  // ── Public: Detail by slug ──────────────────────────────────
+  // Public: Detail by slug
   async findBySlug(slug: string, viewerHash?: string): Promise<any> {
     const cacheKey = `${PROJECTS_CACHE_KEY}:slug:${slug}`;
 
@@ -116,7 +116,7 @@ export class ProjectsService {
     return formatted;
   }
 
-  // ── Admin: Detail by ID ─────────────────────────────────────
+  // Admin: Detail by ID
   async findById(id: string) {
     const project = await this.prisma.project.findUnique({
       where: { id },
@@ -136,7 +136,7 @@ export class ProjectsService {
     };
   }
 
-  // ── Admin: Create ───────────────────────────────────────────
+  // Admin: Create
   async create(dto: CreateProjectDto) {
     const slug = this.slugify(dto.title);
 
@@ -163,7 +163,7 @@ export class ProjectsService {
     return created;
   }
 
-  // ── Admin: Update ───────────────────────────────────────────
+  // Admin: Update
   async update(id: string, dto: UpdateProjectDto) {
     await this.findById(id);
 
@@ -188,7 +188,7 @@ export class ProjectsService {
     return updated;
   }
 
-  // ── Admin: Upload thumbnail ─────────────────────────────────
+  // Admin: Upload thumbnail
   async updateThumbnail(id: string, url: string) {
     const current = await this.findById(id);
 
@@ -208,7 +208,7 @@ export class ProjectsService {
     return updated;
   }
 
-  // ── Admin: Upload docs (multi-file) ─────────────────────────
+  // Admin: Upload docs (multi-file)
   async addDocs(
     id: string,
     files: Express.Multer.File[],
@@ -249,7 +249,7 @@ export class ProjectsService {
     return docs;
   }
 
-  // ── Admin: Delete single doc ────────────────────────────────
+  // Admin: Delete single doc
   async removeDoc(projectId: string, docId: string) {
     const project = await this.findById(projectId);
 
@@ -276,7 +276,7 @@ export class ProjectsService {
     await this.invalidateCache(project.slug);
   }
 
-  // ── Admin: Delete project ───────────────────────────────────
+  // Admin: Delete project
   async remove(id: string) {
     const project = await this.findById(id);
 
@@ -306,7 +306,7 @@ export class ProjectsService {
     await this.invalidateCache(project.slug);
   }
 
-  // ── Public: Increment view (atomic) ─────────────────────────
+  // Public: Increment view (atomic)
   async incrementView(slug: string) {
     const project = await this.prisma.project.findUnique({
       where: { slug },
@@ -326,7 +326,7 @@ export class ProjectsService {
     await this.cacheManager.del(`${PROJECTS_CACHE_KEY}:slug:${slug}`);
   }
 
-  // ── Public: Toggle like (idempotent via ProjectLike hash) ───
+  // Public: Toggle like (idempotent via ProjectLike hash)
   async toggleLike(
     slug: string,
     hash: string,
@@ -384,7 +384,7 @@ export class ProjectsService {
     return { liked: true, likeCount: updated.likeCount };
   }
 
-  // ── Private: Check if viewerHash already liked ──────────────
+  // Private: Check if viewerHash already liked
   private async hasLiked(projectId: string, hash: string): Promise<boolean> {
     const like = await this.prisma.projectLike.findUnique({
       where: {
@@ -398,7 +398,7 @@ export class ProjectsService {
     return !!like;
   }
 
-  // ── Private: Slugify ────────────────────────────────────────
+  // Private: Slugify
   private slugify(title: string): string {
     return title
       .toLowerCase()
@@ -409,7 +409,7 @@ export class ProjectsService {
       .replace(/^-+|-+$/g, '');
   }
 
-  // ── Private: Extract Cloudinary public_id from URL ──────────
+  // Private: Extract Cloudinary public_id from URL
   private extractPublicId(url: string): string | null {
     try {
       const urlParts = url.split('/');
@@ -426,7 +426,7 @@ export class ProjectsService {
     }
   }
 
-  // ── Private: Cache invalidation ─────────────────────────────
+  // Private: Cache invalidation
   private async invalidateCache(slug?: string) {
     await this.bumpListVersion();
 
