@@ -24,6 +24,7 @@ import {
 } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { createHash } from 'node:crypto';
+import { Throttle, seconds } from '@nestjs/throttler';
 import { ProjectStatus } from 'generated/prisma/client';
 import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -82,6 +83,7 @@ export class ProjectsController {
 
   // ── Public: Increment view ──────────────────────────────────
   @ApiOperation({ summary: 'Increment view counter' })
+  @Throttle({ default: { limit: 5, ttl: seconds(60) } })
   @Post('slug/:slug/view')
   async incrementView(@Param('slug') slug: string) {
     await this.projectsService.incrementView(slug);
@@ -90,6 +92,7 @@ export class ProjectsController {
 
   // ── Public: Toggle like ──────────────────────────────────────
   @ApiOperation({ summary: 'Toggle like/unlike' })
+  @Throttle({ default: { limit: 5, ttl: seconds(60) } })
   @Post('slug/:slug/like/toggle')
   async toggleLike(@Param('slug') slug: string, @Req() req: Request) {
     const hash = this.hashViewer(req);

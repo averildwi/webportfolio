@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Throttle, seconds } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { RawResponse } from '../common/interceptors/transform.interceptor';
 import { AuthService } from './auth.service';
@@ -43,6 +44,7 @@ export class AuthController {
   }
 
   @ApiOperation({ summary: 'Login Admin' })
+  @Throttle({ default: { limit: 10, ttl: seconds(60) } })
   @HttpCode(HttpStatus.OK)
   @Post('login')
   async login(

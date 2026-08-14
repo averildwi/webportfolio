@@ -1,17 +1,24 @@
 import { PrismaModule } from './prisma/prisma.module';
 import { Module } from '@nestjs/common';
 import { CacheModule } from '@nestjs/cache-manager';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerModule, seconds } from '@nestjs/throttler';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AppConfigModule } from './common/config/app-config.module';
 import { HashingModule } from './common/hashing/hashing.module';
 import { UploadModule } from './common/upload/upload.module';
+import { AppThrottlerGuard } from './common/guards/throttler.guard';
 import { AuthModule } from './auth/auth.module';
 import { SiteConfigModule } from './site-config/site-config.module';
 import { TechStackModule } from './tech-stack/tech-stack.module';
 import { ExperiencesModule } from './experiences/experiences.module';
 import { EducationsModule } from './educations/educations.module';
 import { ProjectsModule } from './projects/projects.module';
+import { AchievementsModule } from './achievements/achievements.module';
+import { TestimonialsModule } from './testimonials/testimonials.module';
+import { ContactModule } from './contact/contact.module';
+import { GuestbookModule } from './guestbook/guestbook.module';
 
 @Module({
   imports: [
@@ -20,6 +27,13 @@ import { ProjectsModule } from './projects/projects.module';
       isGlobal: true,
       ttl: 60 * 1000,
     }),
+    ThrottlerModule.forRoot([
+      {
+        name: 'default',
+        ttl: seconds(60),
+        limit: 100,
+      },
+    ]),
     HashingModule,
     PrismaModule,
     UploadModule,
@@ -29,8 +43,18 @@ import { ProjectsModule } from './projects/projects.module';
     ExperiencesModule,
     EducationsModule,
     ProjectsModule,
+    AchievementsModule,
+    TestimonialsModule,
+    ContactModule,
+    GuestbookModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    {
+      provide: APP_GUARD,
+      useClass: AppThrottlerGuard,
+    },
+  ],
 })
 export class AppModule {}
