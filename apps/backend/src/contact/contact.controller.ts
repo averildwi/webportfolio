@@ -7,7 +7,6 @@ import {
   Patch,
   Post,
   Query,
-  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -17,9 +16,8 @@ import {
 } from '@nestjs/swagger';
 import { ContactStatus } from 'generated/prisma/client';
 import { Throttle, seconds } from '@nestjs/throttler';
+import { Public } from '../common/decorators/public.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
-import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../common/guards/roles.guard';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import {
   MessageResponse,
@@ -35,6 +33,7 @@ export class ContactController {
 
   @ApiOperation({ summary: 'Submit pesan kontak (public)' })
   @Throttle({ default: { limit: 3, ttl: seconds(300) } })
+  @Public()
   @Post()
   async create(@Body() dto: CreateContactDto) {
     return this.contactService.create(dto);
@@ -43,7 +42,6 @@ export class ContactController {
   @ApiOperation({ summary: 'List pesan masuk (admin)' })
   @ApiBearerAuth('access-token')
   @ApiQuery({ name: 'status', required: false, enum: ContactStatus })
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Get()
   async findAll(
@@ -61,7 +59,6 @@ export class ContactController {
 
   @ApiOperation({ summary: 'Detail pesan (read-only)' })
   @ApiBearerAuth('access-token')
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Get(':id')
   async findOne(@Param('id') id: string) {
@@ -70,7 +67,6 @@ export class ContactController {
 
   @ApiOperation({ summary: 'Tandai pesan sebagai READ' })
   @ApiBearerAuth('access-token')
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Patch(':id/read')
   async markAsRead(@Param('id') id: string) {
@@ -79,7 +75,6 @@ export class ContactController {
 
   @ApiOperation({ summary: 'Update status pesan' })
   @ApiBearerAuth('access-token')
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Patch(':id')
   async updateStatus(
@@ -91,7 +86,6 @@ export class ContactController {
 
   @ApiOperation({ summary: 'Hapus pesan' })
   @ApiBearerAuth('access-token')
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Delete(':id')
   async remove(@Param('id') id: string) {

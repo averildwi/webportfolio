@@ -7,6 +7,8 @@ import { AppConfigModule } from './common/config/app-config.module';
 import { HashingModule } from './common/hashing/hashing.module';
 import { UploadModule } from './common/upload/upload.module';
 import { AppThrottlerGuard } from './common/guards/throttler.guard';
+import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { RolesGuard } from './common/guards/roles.guard';
 import { AuthModule } from './auth/auth.module';
 import { SiteConfigModule } from './site-config/site-config.module';
 import { TechStackModule } from './tech-stack/tech-stack.module';
@@ -50,9 +52,25 @@ import { HealthModule } from './health/health.module';
   ],
   controllers: [],
   providers: [
+    // Urutan pendaftaran = urutan eksekusi.
+    //
+    // Throttle lebih dulu supaya request yang melewati kuota ditolak sebelum
+    // menyentuh verifikasi JWT dan query database.
     {
       provide: APP_GUARD,
       useClass: AppThrottlerGuard,
+    },
+    // Autentikasi global: route tertutup secara default, sehingga handler baru
+    // yang lupa dipasangi guard gagal dengan 401 alih-alih terbuka. Route
+    // publik menyatakan diri lewat @Public().
+    {
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard,
+    },
+    // Otorisasi role berjalan setelah autentikasi, saat request.user terisi.
+    {
+      provide: APP_GUARD,
+      useClass: RolesGuard,
     },
   ],
 })

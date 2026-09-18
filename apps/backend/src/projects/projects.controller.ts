@@ -10,7 +10,6 @@ import {
   Req,
   UploadedFile,
   UploadedFiles,
-  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
@@ -23,9 +22,8 @@ import {
 } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { Throttle, seconds } from '@nestjs/throttler';
+import { Public } from '../common/decorators/public.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
-import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../common/guards/roles.guard';
 import { FilePipe } from '../common/upload/pipes/file.pipe';
 import { UploadService } from '../common/upload/upload.service';
 import { hashViewer } from '../common/helpers/viewer-hash.helper';
@@ -54,6 +52,7 @@ export class ProjectsController {
   @ApiOperation({
     summary: 'List project publik (paginated, cached, status PUBLISHED)',
   })
+  @Public()
   @Get()
   async findAll(@Query() query: ListProjectsPublicDto) {
     const result = await this.projectsService.findAllPublic({
@@ -68,7 +67,6 @@ export class ProjectsController {
   // ── Admin: List semua status ────────────────────────────────
   @ApiOperation({ summary: 'List project semua status (admin)' })
   @ApiBearerAuth('access-token')
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Get('admin')
   async findAllAdmin(@Query() query: ListProjectsAdminDto) {
@@ -84,6 +82,7 @@ export class ProjectsController {
 
   // ── Public: Detail by slug ──────────────────────────────────
   @ApiOperation({ summary: 'Detail project by slug (PUBLISHED only)' })
+  @Public()
   @Get('slug/:slug')
   async findBySlug(
     @Param('slug') slug: string,
@@ -95,6 +94,7 @@ export class ProjectsController {
   // ── Public: Increment view ──────────────────────────────────
   @ApiOperation({ summary: 'Increment view counter' })
   @Throttle({ default: { limit: 5, ttl: seconds(60) } })
+  @Public()
   @Post('slug/:slug/view')
   async incrementView(@Param('slug') slug: string) {
     await this.projectsService.incrementView(slug);
@@ -104,6 +104,7 @@ export class ProjectsController {
   // ── Public: Toggle like ──────────────────────────────────────
   @ApiOperation({ summary: 'Toggle like/unlike' })
   @Throttle({ default: { limit: 5, ttl: seconds(60) } })
+  @Public()
   @Post('slug/:slug/like/toggle')
   async toggleLike(@Param('slug') slug: string, @Req() req: Request) {
     const result = await this.projectsService.toggleLike(slug, hashViewer(req));
@@ -113,7 +114,6 @@ export class ProjectsController {
   // ── Admin: Detail by ID ──────────────────────────────────────
   @ApiOperation({ summary: 'Detail project by ID (admin)' })
   @ApiBearerAuth('access-token')
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Get(':id')
   async findById(@Param('id') id: string) {
@@ -123,7 +123,6 @@ export class ProjectsController {
   // ── Admin: Create ───────────────────────────────────────────
   @ApiOperation({ summary: 'Buat project baru' })
   @ApiBearerAuth('access-token')
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Post()
   async create(@Body() dto: CreateProjectDto) {
@@ -140,7 +139,6 @@ export class ProjectsController {
       properties: { file: { type: 'string', format: 'binary' } },
     },
   })
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @UseInterceptors(FileInterceptor('file'))
   @Post(':id/thumbnail')
@@ -173,7 +171,6 @@ export class ProjectsController {
       },
     },
   })
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @UseInterceptors(FilesInterceptor('files', MAX_DOCS))
   @Post(':id/docs')
@@ -217,7 +214,6 @@ export class ProjectsController {
   // ── Admin: Delete single doc ────────────────────────────────
   @ApiOperation({ summary: 'Hapus satu dokumentasi project' })
   @ApiBearerAuth('access-token')
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Delete(':id/docs/:docId')
   async removeDoc(@Param('id') id: string, @Param('docId') docId: string) {
@@ -228,7 +224,6 @@ export class ProjectsController {
   // ── Admin: Update ───────────────────────────────────────────
   @ApiOperation({ summary: 'Update project' })
   @ApiBearerAuth('access-token')
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Patch(':id')
   async update(@Param('id') id: string, @Body() dto: UpdateProjectDto) {
@@ -238,7 +233,6 @@ export class ProjectsController {
   // ── Admin: Delete ───────────────────────────────────────────
   @ApiOperation({ summary: 'Hapus project + cleanup Cloudinary' })
   @ApiBearerAuth('access-token')
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Delete(':id')
   async remove(@Param('id') id: string) {

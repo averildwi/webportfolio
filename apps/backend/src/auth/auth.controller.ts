@@ -17,8 +17,7 @@ import type { CookieOptions, Request, Response } from 'express';
 import { RawResponse } from '../common/interceptors/transform.interceptor';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
-import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../common/guards/roles.guard';
+import { Public } from '../common/decorators/public.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type {
@@ -44,6 +43,7 @@ export class AuthController {
   }
 
   @ApiOperation({ summary: 'Login Admin' })
+  @Public()
   @Throttle({ default: { limit: 10, ttl: seconds(60) } })
   @HttpCode(HttpStatus.OK)
   @Post('login')
@@ -62,14 +62,16 @@ export class AuthController {
 
   @ApiOperation({ summary: 'Get current logged in Admin' })
   @ApiBearerAuth('access-token')
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Get('me')
   getMe(@CurrentUser() user: AdminPayload) {
     return { id: user.id, email: user.email };
   }
 
+  // Publik: identitas pemanggil berasal dari refresh token di cookie, bukan
+  // dari access token di header Authorization.
   @ApiOperation({ summary: 'Refresh access token (rotasi refresh token)' })
+  @Public()
   @Throttle({ default: { limit: 30, ttl: seconds(60) } })
   @HttpCode(HttpStatus.OK)
   @Post('refresh')
@@ -93,7 +95,10 @@ export class AuthController {
     }
   }
 
+  // Publik supaya logout tetap bisa dipanggil walau access token sudah expired
+  // — sesi tetap dicabut berdasarkan refresh token di cookie.
   @ApiOperation({ summary: 'Logout (cabut refresh token + clear cookie)' })
+  @Public()
   @HttpCode(HttpStatus.OK)
   @Post('logout')
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
@@ -105,12 +110,17 @@ export class AuthController {
     return new RawResponse({ message: 'Logout berhasil' });
   }
 
+  // Alur OAuth memakai guard Passport-nya sendiri. @Public() melepasnya dari
+  // JwtAuthGuard global, yang kalau tidak akan menolak request ini lebih dulu
+  // karena pengunjung memang belum punya JWT saat memulai login.
   @ApiOperation({ summary: 'Redirect ke Google OAuth consent screen' })
+  @Public()
   @UseGuards(AuthGuard('google'))
   @Get('google')
   googleAuth() {}
 
   @ApiOperation({ summary: 'Callback Google OAuth' })
+  @Public()
   @UseGuards(AuthGuard('google'))
   @Get('google/callback')
   async googleAuthCallback(@Req() req: OAuthRequest, @Res() res: Response) {
@@ -118,18 +128,23 @@ export class AuthController {
   }
 
   @ApiOperation({ summary: 'Redirect ke GitHub OAuth consent screen' })
+  @Public()
   @UseGuards(AuthGuard('github'))
   @Get('github')
   githubAuth() {}
 
   @ApiOperation({ summary: 'Callback GitHub OAuth' })
+  @Public()
   @UseGuards(AuthGuard('github'))
   @Get('github/callback')
   async githubAuthCallback(@Req() req: OAuthRequest, @Res() res: Response) {
     return this.handleOAuthCallback(req.user, res);
   }
 
+  // Publik: menukar cookie sekali pakai yang baru di-set oleh callback OAuth
+  // menjadi access token; pemanggil belum memegang token apa pun.
   @ApiOperation({ summary: 'Get OAuth access token from cookie (exchange)' })
+  @Public()
   @HttpCode(HttpStatus.OK)
   @Post('oauth/token')
   exchangeOAuthToken(
@@ -150,7 +165,6 @@ export class AuthController {
 
   @ApiOperation({ summary: 'Get current logged in Visitor' })
   @ApiBearerAuth('access-token')
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('VISITOR')
   @Get('visitor/me')
   getVisitorMe(@CurrentUser() user: VisitorPayload) {

@@ -8,7 +8,6 @@ import {
   Post,
   Query,
   UploadedFile,
-  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -20,9 +19,8 @@ import {
   ApiQuery,
   ApiTags,
 } from '@nestjs/swagger';
+import { Public } from '../common/decorators/public.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
-import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../common/guards/roles.guard';
 import { FilePipe } from '../common/upload/pipes/file.pipe';
 import { UploadService } from '../common/upload/upload.service';
 import { MessageResponse } from '../common/interceptors/transform.interceptor';
@@ -42,6 +40,7 @@ export class TestimonialsController {
 
   @ApiOperation({ summary: 'List testimonials (cached)' })
   @ApiQuery({ name: 'featured', required: false, type: Boolean })
+  @Public()
   @Get()
   async findAll(@Query('featured') featured?: string) {
     return this.testimonialsService.findAll({
@@ -50,6 +49,7 @@ export class TestimonialsController {
   }
 
   @ApiOperation({ summary: 'Detail satu testimonial' })
+  @Public()
   @Get(':id')
   async findOne(@Param('id') id: string) {
     return this.testimonialsService.findOne(id);
@@ -57,7 +57,6 @@ export class TestimonialsController {
 
   @ApiOperation({ summary: 'Buat testimonial baru' })
   @ApiBearerAuth('access-token')
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Post()
   async create(@Body() dto: CreateTestimonialDto) {
@@ -73,7 +72,6 @@ export class TestimonialsController {
       properties: { file: { type: 'string', format: 'binary' } },
     },
   })
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @UseInterceptors(FileInterceptor('file'))
   @Post(':id/avatar')
@@ -91,7 +89,6 @@ export class TestimonialsController {
 
   @ApiOperation({ summary: 'Update testimonial' })
   @ApiBearerAuth('access-token')
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Patch(':id')
   async update(@Param('id') id: string, @Body() dto: UpdateTestimonialDto) {
@@ -100,7 +97,6 @@ export class TestimonialsController {
 
   @ApiOperation({ summary: 'Hapus testimonial + cleanup Cloudinary' })
   @ApiBearerAuth('access-token')
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Delete(':id')
   async remove(@Param('id') id: string) {

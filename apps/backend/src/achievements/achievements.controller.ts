@@ -8,7 +8,6 @@ import {
   Post,
   Query,
   UploadedFile,
-  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -19,9 +18,8 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
+import { Public } from '../common/decorators/public.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
-import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../common/guards/roles.guard';
 import { FeaturedPaginationDto } from '../common/dto/pagination.dto';
 import { FilePipe } from '../common/upload/pipes/file.pipe';
 import { UploadService } from '../common/upload/upload.service';
@@ -44,6 +42,7 @@ export class AchievementsController {
   ) {}
 
   @ApiOperation({ summary: 'List achievement (paginated, cached)' })
+  @Public()
   @Get()
   async findAll(@Query() query: FeaturedPaginationDto) {
     const result = await this.achievementsService.findAll({
@@ -56,6 +55,7 @@ export class AchievementsController {
   }
 
   @ApiOperation({ summary: 'Detail satu achievement' })
+  @Public()
   @Get(':id')
   async findOne(@Param('id') id: string) {
     return this.achievementsService.findOne(id);
@@ -63,7 +63,6 @@ export class AchievementsController {
 
   @ApiOperation({ summary: 'Buat achievement baru' })
   @ApiBearerAuth('access-token')
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Post()
   async create(@Body() dto: CreateAchievementDto) {
@@ -79,7 +78,6 @@ export class AchievementsController {
       properties: { file: { type: 'string', format: 'binary' } },
     },
   })
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @UseInterceptors(FileInterceptor('file'))
   @Post(':id/certificate')
@@ -109,7 +107,6 @@ export class AchievementsController {
 
   @ApiOperation({ summary: 'Update achievement' })
   @ApiBearerAuth('access-token')
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Patch(':id')
   async update(@Param('id') id: string, @Body() dto: UpdateAchievementDto) {
@@ -118,7 +115,6 @@ export class AchievementsController {
 
   @ApiOperation({ summary: 'Hapus achievement + cleanup Cloudinary' })
   @ApiBearerAuth('access-token')
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Delete(':id')
   async remove(@Param('id') id: string) {

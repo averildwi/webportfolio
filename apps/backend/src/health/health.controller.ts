@@ -8,6 +8,7 @@ import {
   PrismaHealthIndicator,
 } from '@nestjs/terminus';
 import { PrismaService } from '../prisma/prisma.service';
+import { Public } from '../common/decorators/public.decorator';
 
 @ApiTags('Health')
 @Controller('health')
@@ -21,6 +22,7 @@ export class HealthController {
   ) {}
 
   @ApiOperation({ summary: 'Status kesehatan sistem (database, memory, disk)' })
+  @Public()
   @Get()
   @HealthCheck()
   check() {

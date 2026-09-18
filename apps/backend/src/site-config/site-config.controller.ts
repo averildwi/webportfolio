@@ -5,7 +5,6 @@ import {
   Patch,
   Post,
   UploadedFile,
-  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -16,9 +15,8 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
+import { Public } from '../common/decorators/public.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
-import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../common/guards/roles.guard';
 import { FilePipe } from '../common/upload/pipes/file.pipe';
 import { UploadService } from '../common/upload/upload.service';
 import { SiteConfigService } from './site-config.service';
@@ -33,6 +31,7 @@ export class SiteConfigController {
   ) {}
 
   @ApiOperation({ summary: 'Ambil konfigurasi profil' })
+  @Public()
   @Get()
   async get() {
     return this.siteConfigService.get();
@@ -40,7 +39,6 @@ export class SiteConfigController {
 
   @ApiOperation({ summary: 'Update konfigurasi profil' })
   @ApiBearerAuth('access-token')
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Patch()
   async update(@Body() dto: UpdateSiteConfigDto) {
@@ -58,7 +56,6 @@ export class SiteConfigController {
       },
     },
   })
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @UseInterceptors(FileInterceptor('file'))
   @Post('avatar')
@@ -84,7 +81,6 @@ export class SiteConfigController {
       },
     },
   })
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @UseInterceptors(FileInterceptor('file'))
   @Post('resume')

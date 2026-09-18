@@ -8,7 +8,6 @@ import {
   Post,
   Query,
   UploadedFile,
-  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -21,9 +20,8 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { TechCategory } from 'generated/prisma/client';
+import { Public } from '../common/decorators/public.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
-import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../common/guards/roles.guard';
 import { FilePipe } from '../common/upload/pipes/file.pipe';
 import { UploadService } from '../common/upload/upload.service';
 import { TechStackService } from './tech-stack.service';
@@ -40,12 +38,14 @@ export class TechStackController {
 
   @ApiOperation({ summary: 'Ambil semua tech stack' })
   @ApiQuery({ name: 'category', enum: TechCategory, required: false })
+  @Public()
   @Get()
   async findAll(@Query('category') category?: TechCategory) {
     return this.techStackService.findAll(category);
   }
 
   @ApiOperation({ summary: 'Ambil detail satu tech stack' })
+  @Public()
   @Get(':id')
   async findOne(@Param('id') id: string) {
     return this.techStackService.findOne(id);
@@ -53,7 +53,6 @@ export class TechStackController {
 
   @ApiOperation({ summary: 'Buat tech stack baru' })
   @ApiBearerAuth('access-token')
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Post()
   async create(@Body() dto: CreateTechStackDto) {
@@ -71,7 +70,6 @@ export class TechStackController {
       },
     },
   })
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @UseInterceptors(FileInterceptor('file'))
   @Post(':id/icon')
@@ -102,7 +100,6 @@ export class TechStackController {
 
   @ApiOperation({ summary: 'Update tech stack' })
   @ApiBearerAuth('access-token')
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Patch(':id')
   async update(@Param('id') id: string, @Body() dto: UpdateTechStackDto) {
@@ -111,7 +108,6 @@ export class TechStackController {
 
   @ApiOperation({ summary: 'Hapus tech stack' })
   @ApiBearerAuth('access-token')
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Delete(':id')
   async remove(@Param('id') id: string) {

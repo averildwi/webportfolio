@@ -6,12 +6,10 @@ import {
   Param,
   Patch,
   Post,
-  UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Public } from '../common/decorators/public.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
-import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../common/guards/roles.guard';
 import { MessageResponse } from '../common/interceptors/transform.interceptor';
 import { CreateEducationDto, UpdateEducationDto } from './dto/education.dto';
 import { EducationsService } from './educations.service';
@@ -22,12 +20,14 @@ export class EducationsController {
   constructor(private readonly educationsService: EducationsService) {}
 
   @ApiOperation({ summary: 'Ambil semua riwayat pendidikan' })
+  @Public()
   @Get()
   async findAll() {
     return this.educationsService.findAll();
   }
 
   @ApiOperation({ summary: 'Ambil detail satu education' })
+  @Public()
   @Get(':id')
   async findOne(@Param('id') id: string) {
     return this.educationsService.findOne(id);
@@ -35,7 +35,6 @@ export class EducationsController {
 
   @ApiOperation({ summary: 'Buat education baru' })
   @ApiBearerAuth('access-token')
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Post()
   async create(@Body() dto: CreateEducationDto) {
@@ -44,7 +43,6 @@ export class EducationsController {
 
   @ApiOperation({ summary: 'Update education' })
   @ApiBearerAuth('access-token')
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Patch(':id')
   async update(@Param('id') id: string, @Body() dto: UpdateEducationDto) {
@@ -53,7 +51,6 @@ export class EducationsController {
 
   @ApiOperation({ summary: 'Hapus education' })
   @ApiBearerAuth('access-token')
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Delete(':id')
   async remove(@Param('id') id: string) {

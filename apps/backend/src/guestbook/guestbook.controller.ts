@@ -7,14 +7,12 @@ import {
   Patch,
   Post,
   Query,
-  UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle, seconds } from '@nestjs/throttler';
+import { Public } from '../common/decorators/public.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../common/guards/roles.guard';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import {
   MessageResponse,
@@ -33,6 +31,7 @@ export class GuestbookController {
   constructor(private readonly guestbookService: GuestbookService) {}
 
   @ApiOperation({ summary: 'List pesan APPROVED (public)' })
+  @Public()
   @Get()
   async findAllApproved(@Query() query: PaginationDto) {
     const result = await this.guestbookService.findAllApproved({
@@ -46,7 +45,6 @@ export class GuestbookController {
   @ApiOperation({ summary: 'Kirim pesan guestbook (visitor OAuth)' })
   @ApiBearerAuth('access-token')
   @Throttle({ default: { limit: 3, ttl: seconds(300) } })
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('VISITOR')
   @Post()
   async create(
@@ -58,7 +56,6 @@ export class GuestbookController {
 
   @ApiOperation({ summary: 'List semua pesan (admin)' })
   @ApiBearerAuth('access-token')
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Get('admin')
   async findAllAdmin(@Query() query: PaginationDto) {
@@ -72,7 +69,6 @@ export class GuestbookController {
 
   @ApiOperation({ summary: 'Update status moderasi (admin)' })
   @ApiBearerAuth('access-token')
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Patch(':id')
   async updateStatus(
@@ -84,7 +80,6 @@ export class GuestbookController {
 
   @ApiOperation({ summary: 'Hapus pesan (admin)' })
   @ApiBearerAuth('access-token')
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Delete(':id')
   async remove(@Param('id') id: string) {
