@@ -3,6 +3,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotificationService } from './notification.service';
 import { CreateContactDto, UpdateContactStatusDto } from './dto/contact.dto';
 import { ContactStatus } from 'generated/prisma/client';
+import {
+  paginate,
+  type PaginatedResult,
+} from '../common/helpers/paginate.helper';
 
 @Injectable()
 export class ContactService {
@@ -28,17 +32,16 @@ export class ContactService {
     return contact;
   }
 
-  async findAll(options?: {
+  async findAll(options: {
     status?: ContactStatus;
-    page?: number;
-    limit?: number;
-  }) {
-    const page = options?.page ?? 1;
-    const limit = options?.limit ?? 20;
+    page: number;
+    limit: number;
+  }): Promise<PaginatedResult<any>> {
+    const { status, page, limit } = options;
     const skip = (page - 1) * limit;
 
     const where = {
-      ...(options?.status !== undefined && { status: options.status }),
+      ...(status !== undefined && { status }),
     };
 
     const [total, data] = await Promise.all([
@@ -51,17 +54,10 @@ export class ContactService {
       }),
     ]);
 
-    return {
-      data,
-      meta: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
+    return paginate(data, total, page, limit);
   }
 
+  /** Read-only: GET tidak boleh mengubah state. */
   async findOne(id: string) {
     const contact = await this.prisma.contactForm.findUnique({
       where: { id },
@@ -71,18 +67,23 @@ export class ContactService {
       throw new NotFoundException('Pesan tidak ditemukan');
     }
 
-    // Auto-mark UNREAD -> READ
-    if (contact.status === 'UNREAD' && !contact.readAt) {
-      return this.prisma.contactForm.update({
-        where: { id },
-        data: {
-          status: 'READ',
-          readAt: new Date(),
-        },
-      });
+    return contact;
+  }
+
+  async markAsRead(id: string) {
+    const contact = await this.findOne(id);
+
+    if (contact.status !== 'UNREAD') {
+      return contact;
     }
 
-    return contact;
+    return this.prisma.contactForm.update({
+      where: { id },
+      data: {
+        status: 'READ',
+        readAt: contact.readAt ?? new Date(),
+      },
+    });
   }
 
   async updateStatus(id: string, dto: UpdateContactStatusDto) {

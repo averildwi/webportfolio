@@ -1,15 +1,25 @@
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UploadService } from '../common/upload/upload.service';
 import { CreateProjectDto, UpdateProjectDto } from './dto/project.dto';
-import type { ProjectStatus } from 'generated/prisma/client';
+import type { Prisma, ProjectStatus } from 'generated/prisma/client';
+import {
+  paginate,
+  type PaginatedResult,
+} from '../common/helpers/paginate.helper';
+import { NO_EXPIRE_TTL } from '../common/cache/cache.constants';
 
 export const PROJECTS_CACHE_KEY = 'projects';
 const PROJECTS_LIST_VERSION_KEY = `${PROJECTS_CACHE_KEY}:list-version`;
 
-const MAX_DOCS = 10;
+export const MAX_DOCS = 10;
 
 @Injectable()
 export class ProjectsService {
@@ -19,68 +29,57 @@ export class ProjectsService {
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
   ) {}
 
-  // Public: List (paginated)
-  async findAll(options?: {
+  // Public: List (paginated) — hanya PUBLISHED
+  async findAllPublic(options: {
     featured?: boolean;
-    status?: ProjectStatus;
-    page?: number;
-    limit?: number;
-  }): Promise<{ data: any[]; meta: Record<string, any> }> {
-    const page = options?.page ?? 1;
-    const limit = options?.limit ?? 20;
-    const skip = (page - 1) * limit;
+    page: number;
+    limit: number;
+  }): Promise<PaginatedResult<any>> {
+    const { featured, page, limit } = options;
 
     const listVersion = await this.getListVersion();
-    const cacheKey = `${PROJECTS_CACHE_KEY}:list:v${listVersion}:${options?.status ?? 'PUBLISHED'}:${options?.featured ?? 'all'}:${page}:${limit}`;
+    const cacheKey = `${PROJECTS_CACHE_KEY}:list:v${listVersion}:PUBLISHED:${featured ?? 'all'}:${page}:${limit}`;
 
-    const cached = await this.cacheManager.get<{
-      data: any[];
-      meta: Record<string, any>;
-    }>(cacheKey);
+    const cached = await this.cacheManager.get<PaginatedResult<any>>(cacheKey);
     if (cached) return cached;
 
-    const where = {
-      status: options?.status ?? 'PUBLISHED',
-      ...(options?.featured !== undefined && { featured: options.featured }),
-    };
-
-    const [total, data] = await Promise.all([
-      this.prisma.project.count({ where }),
-      this.prisma.project.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { order: 'asc' },
-        include: {
-          techStacks: { include: { techStack: true } },
-        },
-      }),
-    ]);
-
-    const formatted = data.map((p) => ({
-      ...p,
-      techStacks: p.techStacks.map((t) => t.techStack),
-    }));
-
-    const result = {
-      data: formatted,
-      meta: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
+    const result = await this.queryList({
+      where: {
+        status: 'PUBLISHED',
+        ...(featured !== undefined && { featured }),
       },
-    };
+      page,
+      limit,
+    });
 
     await this.cacheManager.set(cacheKey, result);
     return result;
   }
 
-  // Public: Detail by slug
-  async findBySlug(slug: string, viewerHash?: string): Promise<any> {
+  // Admin: List semua status (tidak di-cache, selalu fresh untuk dashboard)
+  async findAllAdmin(options: {
+    featured?: boolean;
+    status?: ProjectStatus;
+    page: number;
+    limit: number;
+  }): Promise<PaginatedResult<any>> {
+    const { featured, status, page, limit } = options;
+
+    return this.queryList({
+      where: {
+        ...(status !== undefined && { status }),
+        ...(featured !== undefined && { featured }),
+      },
+      page,
+      limit,
+    });
+  }
+
+  // Public: Detail by slug — hanya PUBLISHED
+  async findBySlug(slug: string, viewerHash?: string): Promise<unknown> {
     const cacheKey = `${PROJECTS_CACHE_KEY}:slug:${slug}`;
 
-    const cached = await this.cacheManager.get<any>(cacheKey);
+    const cached = await this.cacheManager.get<{ id: string }>(cacheKey);
     if (cached) {
       if (viewerHash) {
         const liked = await this.hasLiked(cached.id, viewerHash);
@@ -89,8 +88,8 @@ export class ProjectsService {
       return cached;
     }
 
-    const project = await this.prisma.project.findUnique({
-      where: { slug },
+    const project = await this.prisma.project.findFirst({
+      where: { slug, status: 'PUBLISHED' },
       include: {
         techStacks: { include: { techStack: true } },
         docs: { orderBy: { order: 'asc' } },
@@ -192,12 +191,7 @@ export class ProjectsService {
   async updateThumbnail(id: string, url: string) {
     const current = await this.findById(id);
 
-    if (current.thumbnailUrl) {
-      const publicId = this.extractPublicId(current.thumbnailUrl);
-      if (publicId) {
-        await this.uploadService.deleteFile(publicId, 'image').catch(() => {});
-      }
-    }
+    await this.uploadService.deleteByUrl(current.thumbnailUrl);
 
     const updated = await this.prisma.project.update({
       where: { id },
@@ -208,44 +202,52 @@ export class ProjectsService {
     return updated;
   }
 
-  // Admin: Upload docs (multi-file)
-  async addDocs(
+  async assertDocsCapacity(
     id: string,
-    files: Express.Multer.File[],
-    uploadResults: { url: string; publicId: string; resourceType: string }[],
-  ) {
-    const current = await this.findById(id);
+    incoming: number,
+  ): Promise<{ slug: string; existingCount: number }> {
+    const project = await this.prisma.project.findUnique({
+      where: { id },
+      select: { slug: true },
+    });
+
+    if (!project) {
+      throw new NotFoundException('Project tidak ditemukan');
+    }
 
     const existingCount = await this.prisma.projectDoc.count({
       where: { projectId: id },
     });
 
-    if (existingCount + files.length > MAX_DOCS) {
-      // Cleanup already uploaded files
-      for (const result of uploadResults) {
-        await this.uploadService
-          .deleteFile(result.publicId, result.resourceType)
-          .catch(() => {});
-      }
-      throw new Error(
+    if (existingCount + incoming > MAX_DOCS) {
+      throw new BadRequestException(
         `Maksimal ${MAX_DOCS} dokumentasi per project. Saat ini sudah ada ${existingCount}.`,
       );
     }
 
-    const docs = await Promise.all(
+    return { slug: project.slug, existingCount };
+  }
+
+  // Admin: Simpan hasil upload docs (multi-file)
+  async addDocs(
+    id: string,
+    uploadResults: { url: string; publicId: string; resourceType: string }[],
+    context: { slug: string; existingCount: number },
+  ) {
+    const docs = await this.prisma.$transaction(
       uploadResults.map((result, index) =>
         this.prisma.projectDoc.create({
           data: {
             projectId: id,
             url: result.url,
             type: result.resourceType === 'raw' ? 'PDF' : 'IMAGE',
-            order: existingCount + index,
+            order: context.existingCount + index,
           },
         }),
       ),
     );
 
-    await this.invalidateCache(current.slug);
+    await this.invalidateCache(context.slug);
     return docs;
   }
 
@@ -261,13 +263,7 @@ export class ProjectsService {
       throw new NotFoundException('Dokumentasi tidak ditemukan');
     }
 
-    const publicId = this.extractPublicId(doc.url);
-    if (publicId) {
-      const resourceType = doc.type === 'PDF' ? 'raw' : 'image';
-      await this.uploadService
-        .deleteFile(publicId, resourceType)
-        .catch(() => {});
-    }
+    await this.uploadService.deleteByUrl(doc.url);
 
     await this.prisma.projectDoc.delete({
       where: { id: docId },
@@ -280,23 +276,9 @@ export class ProjectsService {
   async remove(id: string) {
     const project = await this.findById(id);
 
-    // Cleanup thumbnail
-    if (project.thumbnailUrl) {
-      const publicId = this.extractPublicId(project.thumbnailUrl);
-      if (publicId) {
-        await this.uploadService.deleteFile(publicId, 'image').catch(() => {});
-      }
-    }
-
-    // Cleanup all docs
+    await this.uploadService.deleteByUrl(project.thumbnailUrl);
     for (const doc of project.docs) {
-      const publicId = this.extractPublicId(doc.url);
-      if (publicId) {
-        const resourceType = doc.type === 'PDF' ? 'raw' : 'image';
-        await this.uploadService
-          .deleteFile(publicId, resourceType)
-          .catch(() => {});
-      }
+      await this.uploadService.deleteByUrl(doc.url);
     }
 
     await this.prisma.project.delete({
@@ -306,10 +288,10 @@ export class ProjectsService {
     await this.invalidateCache(project.slug);
   }
 
-  // Public: Increment view (atomic)
+  // Public: Increment view (atomic) — hanya project PUBLISHED
   async incrementView(slug: string) {
-    const project = await this.prisma.project.findUnique({
-      where: { slug },
+    const project = await this.prisma.project.findFirst({
+      where: { slug, status: 'PUBLISHED' },
       select: { id: true },
     });
 
@@ -326,13 +308,13 @@ export class ProjectsService {
     await this.cacheManager.del(`${PROJECTS_CACHE_KEY}:slug:${slug}`);
   }
 
-  // Public: Toggle like (idempotent via ProjectLike hash)
+  // Public: Toggle like (idempotent via ProjectLike hash) — hanya PUBLISHED
   async toggleLike(
     slug: string,
     hash: string,
   ): Promise<{ liked: boolean; likeCount: number }> {
-    const project = await this.prisma.project.findUnique({
-      where: { slug },
+    const project = await this.prisma.project.findFirst({
+      where: { slug, status: 'PUBLISHED' },
       select: { id: true, likeCount: true },
     });
 
@@ -384,6 +366,36 @@ export class ProjectsService {
     return { liked: true, likeCount: updated.likeCount };
   }
 
+  // Private: shared list query
+  private async queryList(params: {
+    where: Prisma.ProjectWhereInput;
+    page: number;
+    limit: number;
+  }): Promise<PaginatedResult<any>> {
+    const { where, page, limit } = params;
+    const skip = (page - 1) * limit;
+
+    const [total, data] = await Promise.all([
+      this.prisma.project.count({ where }),
+      this.prisma.project.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { order: 'asc' },
+        include: {
+          techStacks: { include: { techStack: true } },
+        },
+      }),
+    ]);
+
+    const formatted = data.map((p) => ({
+      ...p,
+      techStacks: p.techStacks.map((t) => t.techStack),
+    }));
+
+    return paginate(formatted, total, page, limit);
+  }
+
   // Private: Check if viewerHash already liked
   private async hasLiked(projectId: string, hash: string): Promise<boolean> {
     const like = await this.prisma.projectLike.findUnique({
@@ -409,23 +421,6 @@ export class ProjectsService {
       .replace(/^-+|-+$/g, '');
   }
 
-  // Private: Extract Cloudinary public_id from URL
-  private extractPublicId(url: string): string | null {
-    try {
-      const urlParts = url.split('/');
-      const uploadIndex = urlParts.findIndex((part) => part === 'upload');
-      if (uploadIndex === -1) return null;
-
-      const pathParts = urlParts.slice(uploadIndex + 2);
-      const fullPath = pathParts.join('/');
-      const dotIndex = fullPath.lastIndexOf('.');
-      if (dotIndex === -1) return fullPath;
-      return fullPath.substring(0, dotIndex);
-    } catch {
-      return null;
-    }
-  }
-
   // Private: Cache invalidation
   private async invalidateCache(slug?: string) {
     await this.bumpListVersion();
@@ -439,7 +434,11 @@ export class ProjectsService {
   // (works for in-memory and external stores like Redis without wildcard deps)
   private async bumpListVersion(): Promise<void> {
     const currentVersion = await this.getListVersion();
-    await this.cacheManager.set(PROJECTS_LIST_VERSION_KEY, currentVersion + 1);
+    await this.cacheManager.set(
+      PROJECTS_LIST_VERSION_KEY,
+      currentVersion + 1,
+      NO_EXPIRE_TTL,
+    );
   }
 
   private async getListVersion(): Promise<number> {

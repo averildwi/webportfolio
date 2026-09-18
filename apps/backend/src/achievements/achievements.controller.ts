@@ -17,12 +17,12 @@ import {
   ApiBody,
   ApiConsumes,
   ApiOperation,
-  ApiQuery,
   ApiTags,
 } from '@nestjs/swagger';
 import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { FeaturedPaginationDto } from '../common/dto/pagination.dto';
 import { FilePipe } from '../common/upload/pipes/file.pipe';
 import { UploadService } from '../common/upload/upload.service';
 import {
@@ -44,19 +44,12 @@ export class AchievementsController {
   ) {}
 
   @ApiOperation({ summary: 'List achievement (paginated, cached)' })
-  @ApiQuery({ name: 'featured', required: false, type: Boolean })
-  @ApiQuery({ name: 'page', required: false, type: Number })
-  @ApiQuery({ name: 'limit', required: false, type: Number })
   @Get()
-  async findAll(
-    @Query('featured') featured?: string,
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
-  ) {
+  async findAll(@Query() query: FeaturedPaginationDto) {
     const result = await this.achievementsService.findAll({
-      featured: featured !== undefined ? featured === 'true' : undefined,
-      page: page ? parseInt(page, 10) : undefined,
-      limit: limit ? parseInt(limit, 10) : undefined,
+      featured: query.featured,
+      page: query.page,
+      limit: query.limit,
     });
 
     return new Paginated(result.data, result.meta);

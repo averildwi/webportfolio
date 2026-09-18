@@ -8,6 +8,7 @@ import {
   IsString,
   MaxLength,
   Min,
+  ValidateIf,
 } from 'class-validator';
 
 export class CreateEducationDto {
@@ -86,10 +87,15 @@ export class UpdateEducationDto {
   @IsDateString()
   startDate?: string;
 
-  @ApiPropertyOptional()
-  @IsOptional()
+  @ApiPropertyOptional({
+    description: 'Kirim null untuk menandai kembali "masih menempuh"',
+    nullable: true,
+  })
+  // ValidateIf (bukan IsOptional) supaya `null` eksplisit lolos validasi dan
+  // bisa dibedakan dari field yang tidak dikirim.
+  @ValidateIf((_, value) => value !== null && value !== undefined)
   @IsDateString()
-  endDate?: string;
+  endDate?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()

@@ -20,6 +20,7 @@ import { Throttle, seconds } from '@nestjs/throttler';
 import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { PaginationDto } from '../common/dto/pagination.dto';
 import {
   MessageResponse,
   Paginated,
@@ -42,32 +43,38 @@ export class ContactController {
   @ApiOperation({ summary: 'List pesan masuk (admin)' })
   @ApiBearerAuth('access-token')
   @ApiQuery({ name: 'status', required: false, enum: ContactStatus })
-  @ApiQuery({ name: 'page', required: false, type: Number })
-  @ApiQuery({ name: 'limit', required: false, type: Number })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Get()
   async findAll(
+    @Query() query: PaginationDto,
     @Query('status') status?: ContactStatus,
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
   ) {
     const result = await this.contactService.findAll({
       status,
-      page: page ? parseInt(page, 10) : undefined,
-      limit: limit ? parseInt(limit, 10) : undefined,
+      page: query.page,
+      limit: query.limit,
     });
 
     return new Paginated(result.data, result.meta);
   }
 
-  @ApiOperation({ summary: 'Detail pesan, auto-mark UNREAD -> READ' })
+  @ApiOperation({ summary: 'Detail pesan (read-only)' })
   @ApiBearerAuth('access-token')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Get(':id')
   async findOne(@Param('id') id: string) {
     return this.contactService.findOne(id);
+  }
+
+  @ApiOperation({ summary: 'Tandai pesan sebagai READ' })
+  @ApiBearerAuth('access-token')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Patch(':id/read')
+  async markAsRead(@Param('id') id: string) {
+    return this.contactService.markAsRead(id);
   }
 
   @ApiOperation({ summary: 'Update status pesan' })

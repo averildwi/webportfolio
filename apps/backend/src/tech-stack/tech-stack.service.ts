@@ -79,12 +79,7 @@ export class TechStackService {
   async updateIcon(id: string, iconUrl: string) {
     const current = await this.findOne(id);
 
-    if (current.iconUrl) {
-      const publicId = this.extractPublicId(current.iconUrl);
-      if (publicId) {
-        await this.uploadService.deleteFile(publicId, 'image').catch(() => {});
-      }
-    }
+    await this.uploadService.deleteByUrl(current.iconUrl);
 
     const updated = await this.prisma.techStack.update({
       where: { id },
@@ -98,12 +93,7 @@ export class TechStackService {
   async remove(id: string) {
     const current = await this.findOne(id);
 
-    if (current.iconUrl) {
-      const publicId = this.extractPublicId(current.iconUrl);
-      if (publicId) {
-        await this.uploadService.deleteFile(publicId, 'image').catch(() => {});
-      }
-    }
+    await this.uploadService.deleteByUrl(current.iconUrl);
 
     await this.prisma.techStack.delete({
       where: { id },
@@ -112,33 +102,16 @@ export class TechStackService {
     await this.invalidateCache(id);
   }
 
-  private extractPublicId(url: string): string | null {
-    try {
-      const urlParts = url.split('/');
-      const uploadIndex = urlParts.findIndex((part) => part === 'upload');
-
-      if (uploadIndex === -1) return null;
-
-      const pathParts = urlParts.slice(uploadIndex + 2);
-      const fullPath = pathParts.join('/');
-
-      const dotIndex = fullPath.lastIndexOf('.');
-      if (dotIndex === -1) return fullPath;
-
-      return fullPath.substring(0, dotIndex);
-    } catch {
-      return null;
-    }
-  }
-
   private async invalidateCache(id?: string) {
     await this.cacheManager.del(TECH_STACKS_CACHE_KEY);
 
-    Object.values(TechCategory).forEach((category) => {
-      this.cacheManager
-        .del(`${TECH_STACKS_CACHE_KEY}:${category}`)
-        .catch(() => {});
-    });
+    await Promise.all(
+      Object.values(TechCategory).map((category) =>
+        this.cacheManager
+          .del(`${TECH_STACKS_CACHE_KEY}:${category}`)
+          .catch(() => {}),
+      ),
+    );
 
     if (id) {
       await this.cacheManager.del(`${TECH_STACKS_CACHE_KEY}:${id}`);

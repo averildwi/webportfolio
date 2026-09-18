@@ -13,6 +13,16 @@ import {
   Min,
 } from 'class-validator';
 import { ProjectStatus } from 'generated/prisma/client';
+import { FeaturedPaginationDto } from '../../common/dto/pagination.dto';
+
+export class ListProjectsPublicDto extends FeaturedPaginationDto {}
+
+export class ListProjectsAdminDto extends FeaturedPaginationDto {
+  @ApiPropertyOptional({ enum: ProjectStatus })
+  @IsOptional()
+  @IsEnum(ProjectStatus)
+  status?: ProjectStatus;
+}
 
 export class CreateProjectDto {
   @ApiProperty({ example: 'My Awesome Project' })

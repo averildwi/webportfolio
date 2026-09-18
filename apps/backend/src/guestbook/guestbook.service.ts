@@ -6,9 +6,21 @@ import {
   CreateGuestbookDto,
   UpdateGuestbookStatusDto,
 } from './dto/guestbook.dto';
+import {
+  paginate,
+  type PaginatedResult,
+} from '../common/helpers/paginate.helper';
+import { NO_EXPIRE_TTL } from '../common/cache/cache.constants';
 
 export const GUESTBOOK_CACHE_KEY = 'guestbook';
 const GUESTBOOK_LIST_VERSION_KEY = `${GUESTBOOK_CACHE_KEY}:list-version`;
+
+/** Field visitor yang boleh tampil ke publik — jangan pernah expose email. */
+const PUBLIC_VISITOR_SELECT = {
+  name: true,
+  avatarUrl: true,
+  provider: true,
+} as const;
 
 @Injectable()
 export class GuestbookService {
@@ -18,18 +30,17 @@ export class GuestbookService {
   ) {}
 
   // Public: approved only (paginated)
-  async findAllApproved(options?: { page?: number; limit?: number }) {
-    const page = options?.page ?? 1;
-    const limit = options?.limit ?? 20;
+  async findAllApproved(options: {
+    page: number;
+    limit: number;
+  }): Promise<PaginatedResult<any>> {
+    const { page, limit } = options;
     const skip = (page - 1) * limit;
 
     const listVersion = await this.getListVersion();
     const cacheKey = `${GUESTBOOK_CACHE_KEY}:approved:v${listVersion}:${page}:${limit}`;
 
-    const cached = await this.cacheManager.get<{
-      data: any[];
-      meta: Record<string, any>;
-    }>(cacheKey);
+    const cached = await this.cacheManager.get<PaginatedResult<any>>(cacheKey);
     if (cached) return cached;
 
     const where = { status: 'APPROVED' as const };
@@ -42,35 +53,23 @@ export class GuestbookService {
         take: limit,
         orderBy: { createdAt: 'desc' },
         include: {
-          visitor: {
-            select: {
-              name: true,
-              avatarUrl: true,
-              provider: true,
-            },
-          },
+          visitor: { select: PUBLIC_VISITOR_SELECT },
         },
       }),
     ]);
 
-    const result = {
-      data,
-      meta: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
+    const result = paginate(data, total, page, limit);
 
     await this.cacheManager.set(cacheKey, result);
     return result;
   }
 
   // Admin: all statuses (paginated)
-  async findAllAdmin(options?: { page?: number; limit?: number }) {
-    const page = options?.page ?? 1;
-    const limit = options?.limit ?? 20;
+  async findAllAdmin(options: {
+    page: number;
+    limit: number;
+  }): Promise<PaginatedResult<any>> {
+    const { page, limit } = options;
     const skip = (page - 1) * limit;
 
     const [total, data] = await Promise.all([
@@ -80,26 +79,12 @@ export class GuestbookService {
         take: limit,
         orderBy: { createdAt: 'desc' },
         include: {
-          visitor: {
-            select: {
-              name: true,
-              avatarUrl: true,
-              provider: true,
-            },
-          },
+          visitor: { select: PUBLIC_VISITOR_SELECT },
         },
       }),
     ]);
 
-    return {
-      data,
-      meta: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
+    return paginate(data, total, page, limit);
   }
 
   async create(visitorId: string, dto: CreateGuestbookDto) {
@@ -150,7 +135,11 @@ export class GuestbookService {
 
   private async invalidateCache() {
     const currentVersion = await this.getListVersion();
-    await this.cacheManager.set(GUESTBOOK_LIST_VERSION_KEY, currentVersion + 1);
+    await this.cacheManager.set(
+      GUESTBOOK_LIST_VERSION_KEY,
+      currentVersion + 1,
+      NO_EXPIRE_TTL,
+    );
   }
 
   private async getListVersion(): Promise<number> {

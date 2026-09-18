@@ -63,17 +63,19 @@ export class EducationsService {
   async update(id: string, dto: UpdateEducationDto) {
     await this.findOne(id); // Ensure exists
 
-    const dataToUpdate: any = {
-      ...dto,
-    };
-
-    if (dto.startDate) dataToUpdate.startDate = new Date(dto.startDate);
-    if (dto.endDate) dataToUpdate.endDate = new Date(dto.endDate);
-    if (dto.endDate === null) dataToUpdate.endDate = null;
+    const { startDate, endDate, ...rest } = dto;
 
     const updated = await this.prisma.education.update({
       where: { id },
-      data: dataToUpdate,
+      data: {
+        ...rest,
+        ...(startDate !== undefined && { startDate: new Date(startDate) }),
+        // `null` eksplisit berarti "masih berjalan", jadi harus dibedakan
+        // dari field yang tidak dikirim sama sekali.
+        ...(endDate !== undefined && {
+          endDate: endDate === null ? null : new Date(endDate),
+        }),
+      },
     });
 
     await this.invalidateCache(id);

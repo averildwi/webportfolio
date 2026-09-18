@@ -15,6 +15,10 @@ export interface StandardResponse<T> {
   timestamp: string;
 }
 
+export interface PaginatedResponse<T> extends StandardResponse<T[]> {
+  meta: Record<string, unknown>;
+}
+
 /**
  * Return this instance if you want to return paginated data with meta information.
  * Example: return new Paginated(items, { page, limit, total });
@@ -22,7 +26,7 @@ export interface StandardResponse<T> {
 export class Paginated<T> {
   constructor(
     public data: T[],
-    public meta: Record<string, any>,
+    public meta: Record<string, unknown>,
   ) {}
 }
 
@@ -47,23 +51,24 @@ export class MessageResponse<T> {
 }
 
 @Injectable()
-export class TransformInterceptor<T> implements NestInterceptor<
-  T,
-  StandardResponse<T> | StreamableFile | any
-> {
+export class TransformInterceptor<T> implements NestInterceptor<T, unknown> {
   intercept(
     context: ExecutionContext,
-    next: CallHandler,
-  ): Observable<StandardResponse<T> | StreamableFile | any> {
+    next: CallHandler<T>,
+  ): Observable<unknown> {
     return next.handle().pipe(
-      map((result) => {
-        const statusCode = context.switchToHttp().getResponse().statusCode;
+      map((result: unknown) => {
+        const statusCode = context
+          .switchToHttp()
+          .getResponse<{ statusCode: number }>().statusCode;
 
         // Totally bypass wrapping for StreamableFile (used for file downloads)
         if (result instanceof StreamableFile) return result;
 
         // Explicitly bypass wrapping
-        if (result instanceof RawResponse) return result.payload;
+        if (result instanceof RawResponse) {
+          return (result as RawResponse<unknown>).payload;
+        }
 
         // Pagination
         if (result instanceof Paginated) {
@@ -81,7 +86,7 @@ export class TransformInterceptor<T> implements NestInterceptor<
           return {
             statusCode,
             message: result.message,
-            data: result.payload,
+            data: (result as MessageResponse<unknown>).payload,
             timestamp: new Date().toISOString(),
           };
         }

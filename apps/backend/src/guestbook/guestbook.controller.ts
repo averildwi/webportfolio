@@ -9,17 +9,13 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import {
-  ApiBearerAuth,
-  ApiOperation,
-  ApiQuery,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle, seconds } from '@nestjs/throttler';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { PaginationDto } from '../common/dto/pagination.dto';
 import {
   MessageResponse,
   Paginated,
@@ -37,16 +33,11 @@ export class GuestbookController {
   constructor(private readonly guestbookService: GuestbookService) {}
 
   @ApiOperation({ summary: 'List pesan APPROVED (public)' })
-  @ApiQuery({ name: 'page', required: false, type: Number })
-  @ApiQuery({ name: 'limit', required: false, type: Number })
   @Get()
-  async findAllApproved(
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
-  ) {
+  async findAllApproved(@Query() query: PaginationDto) {
     const result = await this.guestbookService.findAllApproved({
-      page: page ? parseInt(page, 10) : undefined,
-      limit: limit ? parseInt(limit, 10) : undefined,
+      page: query.page,
+      limit: query.limit,
     });
 
     return new Paginated(result.data, result.meta);
@@ -67,18 +58,13 @@ export class GuestbookController {
 
   @ApiOperation({ summary: 'List semua pesan (admin)' })
   @ApiBearerAuth('access-token')
-  @ApiQuery({ name: 'page', required: false, type: Number })
-  @ApiQuery({ name: 'limit', required: false, type: Number })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Get('admin')
-  async findAllAdmin(
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
-  ) {
+  async findAllAdmin(@Query() query: PaginationDto) {
     const result = await this.guestbookService.findAllAdmin({
-      page: page ? parseInt(page, 10) : undefined,
-      limit: limit ? parseInt(limit, 10) : undefined,
+      page: query.page,
+      limit: query.limit,
     });
 
     return new Paginated(result.data, result.meta);

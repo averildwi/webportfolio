@@ -7,6 +7,7 @@ import {
   CreateTestimonialDto,
   UpdateTestimonialDto,
 } from './dto/testimonial.dto';
+import { NO_EXPIRE_TTL } from '../common/cache/cache.constants';
 
 export const TESTIMONIALS_CACHE_KEY = 'testimonials';
 const TESTIMONIALS_LIST_VERSION_KEY = `${TESTIMONIALS_CACHE_KEY}:list-version`;
@@ -82,12 +83,7 @@ export class TestimonialsService {
   async updateAvatar(id: string, url: string) {
     const current = await this.findOne(id);
 
-    if (current.avatarUrl) {
-      const publicId = this.extractPublicId(current.avatarUrl);
-      if (publicId) {
-        await this.uploadService.deleteFile(publicId).catch(() => {});
-      }
-    }
+    await this.uploadService.deleteByUrl(current.avatarUrl);
 
     const updated = await this.prisma.testimonial.update({
       where: { id },
@@ -101,12 +97,7 @@ export class TestimonialsService {
   async remove(id: string) {
     const current = await this.findOne(id);
 
-    if (current.avatarUrl) {
-      const publicId = this.extractPublicId(current.avatarUrl);
-      if (publicId) {
-        await this.uploadService.deleteFile(publicId).catch(() => {});
-      }
-    }
+    await this.uploadService.deleteByUrl(current.avatarUrl);
 
     await this.prisma.testimonial.delete({
       where: { id },
@@ -115,27 +106,12 @@ export class TestimonialsService {
     await this.invalidateCache();
   }
 
-  private extractPublicId(url: string): string | null {
-    try {
-      const urlParts = url.split('/');
-      const uploadIndex = urlParts.findIndex((part) => part === 'upload');
-      if (uploadIndex === -1) return null;
-
-      const pathParts = urlParts.slice(uploadIndex + 2);
-      const fullPath = pathParts.join('/');
-      const dotIndex = fullPath.lastIndexOf('.');
-      if (dotIndex === -1) return fullPath;
-      return fullPath.substring(0, dotIndex);
-    } catch {
-      return null;
-    }
-  }
-
   private async invalidateCache() {
     const currentVersion = await this.getListVersion();
     await this.cacheManager.set(
       TESTIMONIALS_LIST_VERSION_KEY,
       currentVersion + 1,
+      NO_EXPIRE_TTL,
     );
   }
 

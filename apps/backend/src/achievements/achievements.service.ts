@@ -7,6 +7,11 @@ import {
   CreateAchievementDto,
   UpdateAchievementDto,
 } from './dto/achievement.dto';
+import {
+  paginate,
+  type PaginatedResult,
+} from '../common/helpers/paginate.helper';
+import { NO_EXPIRE_TTL } from '../common/cache/cache.constants';
 
 export const ACHIEVEMENTS_CACHE_KEY = 'achievements';
 const ACHIEVEMENTS_LIST_VERSION_KEY = `${ACHIEVEMENTS_CACHE_KEY}:list-version`;
@@ -19,26 +24,22 @@ export class AchievementsService {
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
   ) {}
 
-  async findAll(options?: {
+  async findAll(options: {
     featured?: boolean;
-    page?: number;
-    limit?: number;
-  }) {
-    const page = options?.page ?? 1;
-    const limit = options?.limit ?? 20;
+    page: number;
+    limit: number;
+  }): Promise<PaginatedResult<any>> {
+    const { featured, page, limit } = options;
     const skip = (page - 1) * limit;
 
     const listVersion = await this.getListVersion();
-    const cacheKey = `${ACHIEVEMENTS_CACHE_KEY}:list:v${listVersion}:${options?.featured ?? 'all'}:${page}:${limit}`;
+    const cacheKey = `${ACHIEVEMENTS_CACHE_KEY}:list:v${listVersion}:${featured ?? 'all'}:${page}:${limit}`;
 
-    const cached = await this.cacheManager.get<{
-      data: any[];
-      meta: Record<string, any>;
-    }>(cacheKey);
+    const cached = await this.cacheManager.get<PaginatedResult<any>>(cacheKey);
     if (cached) return cached;
 
     const where = {
-      ...(options?.featured !== undefined && { featured: options.featured }),
+      ...(featured !== undefined && { featured }),
     };
 
     const [total, data] = await Promise.all([
@@ -51,15 +52,7 @@ export class AchievementsService {
       }),
     ]);
 
-    const result = {
-      data,
-      meta: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
+    const result = paginate(data, total, page, limit);
 
     await this.cacheManager.set(cacheKey, result);
     return result;
@@ -111,14 +104,7 @@ export class AchievementsService {
   async updateCertificate(id: string, url: string) {
     const current = await this.findOne(id);
 
-    if (current.certificateUrl) {
-      const info = this.extractFileInfo(current.certificateUrl);
-      if (info) {
-        await this.uploadService
-          .deleteFile(info.publicId, info.resourceType)
-          .catch(() => {});
-      }
-    }
+    await this.uploadService.deleteByUrl(current.certificateUrl);
 
     const updated = await this.prisma.achievement.update({
       where: { id },
@@ -132,14 +118,7 @@ export class AchievementsService {
   async remove(id: string) {
     const current = await this.findOne(id);
 
-    if (current.certificateUrl) {
-      const info = this.extractFileInfo(current.certificateUrl);
-      if (info) {
-        await this.uploadService
-          .deleteFile(info.publicId, info.resourceType)
-          .catch(() => {});
-      }
-    }
+    await this.uploadService.deleteByUrl(current.certificateUrl);
 
     await this.prisma.achievement.delete({
       where: { id },
@@ -148,42 +127,12 @@ export class AchievementsService {
     await this.invalidateCache();
   }
 
-  // Extract Cloudinary public_id + resource_type from URL.
-  // For raw (PDF) uploads the public_id includes the file extension,
-  // so we must keep it; for images we strip the format suffix.
-  private extractFileInfo(url: string): {
-    publicId: string;
-    resourceType: string;
-  } | null {
-    try {
-      const urlParts = url.split('/');
-      const uploadIndex = urlParts.findIndex((part) => part === 'upload');
-      if (uploadIndex === -1) return null;
-
-      const resourceType =
-        urlParts[uploadIndex - 1] === 'raw' ? 'raw' : 'image';
-
-      const pathParts = urlParts.slice(uploadIndex + 2);
-      let fullPath = pathParts.join('/');
-
-      if (resourceType === 'image') {
-        const dotIndex = fullPath.lastIndexOf('.');
-        if (dotIndex !== -1) {
-          fullPath = fullPath.substring(0, dotIndex);
-        }
-      }
-
-      return { publicId: fullPath, resourceType };
-    } catch {
-      return null;
-    }
-  }
-
   private async invalidateCache() {
     const currentVersion = await this.getListVersion();
     await this.cacheManager.set(
       ACHIEVEMENTS_LIST_VERSION_KEY,
       currentVersion + 1,
+      NO_EXPIRE_TTL,
     );
   }
 

@@ -63,7 +63,7 @@ export class NotificationService {
     if (!apiKey) return;
 
     const safeName = this.escapeHtml(contact.name);
-    const safeSubject = this.escapeHtml(contact.subject);
+    const safeSubject = NotificationService.sanitizeHeader(contact.subject);
 
     try {
       await fetch('https://api.resend.com/emails', {
@@ -75,13 +75,20 @@ export class NotificationService {
         body: JSON.stringify({
           from: fromEmail,
           to: [contact.email],
-          subject: `Re: ${contact.subject}`,
+          subject: `Re: ${safeSubject}`,
           html: `<p>Hi ${safeName},</p><p>Terima kasih sudah menghubungi saya! Pesan Anda telah diterima dan akan saya balas secepatnya.</p><p>— Averil</p>`,
         }),
       });
     } catch (err) {
       this.logger.warn(`Auto-reply email gagal: ${(err as Error).message}`);
     }
+  }
+
+  private static sanitizeHeader(value: string): string {
+    return value
+      .replace(/[\r\n]+/g, ' ')
+      .trim()
+      .slice(0, 200);
   }
 
   private escapeHtml(value: string): string {
