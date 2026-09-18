@@ -182,6 +182,7 @@ export class ProjectsController {
     @UploadedFiles(
       new FilePipe({
         maxSizeMb: 5,
+        maxFiles: MAX_DOCS,
         allowedMimes: [
           'image/jpeg',
           'image/png',
