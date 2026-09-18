@@ -12,7 +12,7 @@ import {
   AdminPayload,
   VisitorPayload,
 } from './types/auth.types';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import type { TokenOwner } from 'generated/prisma/client';
 
 @Injectable()
@@ -236,13 +236,25 @@ export class AuthService {
   }): Promise<TokenPair> {
     const { subjectId, owner, email, familyId } = params;
 
+    // `jti` wajib ada. Tanpa itu, dua token dengan payload sama yang
+    // diterbitkan pada detik yang sama menghasilkan JWT yang identik byte per
+    // byte, karena klaim `iat`/`exp` hanya berpresisi detik. Akibatnya login
+    // atau refresh beruntun menabrak unique constraint pada `tokenHash`
+    // (Prisma P2002 -> HTTP 409), dan dua sesi berbeda akan berbagi token
+    // yang sama persis.
     const accessToken: string = this.jwtService.sign(
-      { sub: subjectId, role: owner, ...(email && { email }), type: 'access' },
+      {
+        sub: subjectId,
+        role: owner,
+        ...(email && { email }),
+        type: 'access',
+        jti: randomUUID(),
+      },
       { expiresIn: this.accessTokenExpiresIn as unknown as number },
     );
 
     const refreshToken: string = this.jwtService.sign(
-      { sub: subjectId, role: owner, type: 'refresh' },
+      { sub: subjectId, role: owner, type: 'refresh', jti: randomUUID() },
       {
         expiresIn: this.refreshTokenExpiresIn as unknown as number,
         secret: this.refreshSecret,
