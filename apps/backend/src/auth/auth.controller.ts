@@ -13,7 +13,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle, seconds } from '@nestjs/throttler';
-import type { Request, Response } from 'express';
+import type { CookieOptions, Request, Response } from 'express';
 import { RawResponse } from '../common/interceptors/transform.interceptor';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
@@ -69,7 +69,8 @@ export class AuthController {
     return { id: user.id, email: user.email };
   }
 
-  @ApiOperation({ summary: 'Refresh access token' })
+  @ApiOperation({ summary: 'Refresh access token (rotasi refresh token)' })
+  @Throttle({ default: { limit: 30, ttl: seconds(60) } })
   @HttpCode(HttpStatus.OK)
   @Post('refresh')
   async refresh(
@@ -81,16 +82,25 @@ export class AuthController {
       throw new UnauthorizedException('Refresh token tidak ditemukan');
     }
 
-    const tokens = await this.authService.refreshTokens(refreshToken);
-    this.setRefreshTokenCookie(res, tokens.refreshToken);
+    try {
+      const tokens = await this.authService.refreshTokens(refreshToken);
+      this.setRefreshTokenCookie(res, tokens.refreshToken);
 
-    return new RawResponse({ accessToken: tokens.accessToken });
+      return new RawResponse({ accessToken: tokens.accessToken });
+    } catch (err) {
+      res.clearCookie('refresh_token', this.cookieBaseOptions());
+      throw err;
+    }
   }
 
-  @ApiOperation({ summary: 'Logout (clear refresh token cookie)' })
+  @ApiOperation({ summary: 'Logout (cabut refresh token + clear cookie)' })
   @HttpCode(HttpStatus.OK)
   @Post('logout')
-  logout(@Res({ passthrough: true }) res: Response) {
+  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const refreshToken = req.cookies?.['refresh_token'] as string | undefined;
+
+    await this.authService.revokeRefreshToken(refreshToken);
+
     res.clearCookie('refresh_token', this.cookieBaseOptions());
     return new RawResponse({ message: 'Logout berhasil' });
   }
@@ -165,11 +175,11 @@ export class AuthController {
     return res.redirect(`${frontendUrl}/guestbook?oauth=success`);
   }
 
-  private cookieBaseOptions(): any {
+  private cookieBaseOptions(): CookieOptions {
     return {
       httpOnly: true,
       secure: this.isProduction,
-      sameSite: this.isProduction ? 'strict' : 'lax',
+      sameSite: 'lax',
       path: '/api/auth',
     };
   }
@@ -177,7 +187,7 @@ export class AuthController {
   private setRefreshTokenCookie(res: Response, token: string) {
     res.cookie('refresh_token', token, {
       ...this.cookieBaseOptions(),
-      maxAge: 7 * 24 * 60 * 60 * 1000,
+      maxAge: this.authService.refreshTokenTtlMs,
     });
   }
 

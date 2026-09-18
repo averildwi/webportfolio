@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { HashingService } from '../common/hashing/hashing.service';
+import { RefreshTokenService } from './services/refresh-token.service';
 import { LoginDto } from './dto/login.dto';
 import {
   JwtPayload,
@@ -12,6 +13,7 @@ import {
   VisitorPayload,
 } from './types/auth.types';
 import { randomBytes } from 'node:crypto';
+import type { TokenOwner } from 'generated/prisma/client';
 
 @Injectable()
 export class AuthService {
@@ -28,6 +30,7 @@ export class AuthService {
     private hashingService: HashingService,
     private jwtService: JwtService,
     private configService: ConfigService,
+    private refreshTokenService: RefreshTokenService,
   ) {
     this.dummyHash = this.hashingService.hash(randomBytes(16).toString('hex'));
     this.accessTokenExpiresIn =
@@ -38,11 +41,11 @@ export class AuthService {
     this.refreshSecret =
       this.configService.getOrThrow<string>('JWT_REFRESH_SECRET');
 
-    const frontendUrl =
-      this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
-    this.allowedRedirectOrigins = frontendUrl
+    this.allowedRedirectOrigins = this.configService
+      .getOrThrow<string>('FRONTEND_URL')
       .split(',')
-      .map((url) => url.trim());
+      .map((url) => url.trim())
+      .filter(Boolean);
   }
 
   async loginAdmin(dto: LoginDto) {
@@ -64,10 +67,10 @@ export class AuthService {
       throw new UnauthorizedException('Email atau password salah');
     }
 
-    const tokens = this.generateTokenPair({
-      sub: admin.id,
+    const tokens = await this.issueTokenPair({
+      subjectId: admin.id,
+      owner: 'ADMIN',
       email: admin.email,
-      role: 'ADMIN',
     });
 
     return {
@@ -103,10 +106,13 @@ export class AuthService {
       },
     });
 
-    return this.generateTokenPair({ sub: visitor.id, role: 'VISITOR' });
+    return this.issueTokenPair({
+      subjectId: visitor.id,
+      owner: 'VISITOR',
+    });
   }
 
-  async refreshTokens(refreshToken: string) {
+  async refreshTokens(refreshToken: string): Promise<TokenPair> {
     let payload: JwtPayload & { type: string };
 
     try {
@@ -126,31 +132,69 @@ export class AuthService {
       throw new UnauthorizedException('Token tidak valid');
     }
 
+    const consumed = await this.refreshTokenService.consume(refreshToken);
+    if (!consumed) {
+      throw new UnauthorizedException(
+        'Refresh token sudah tidak berlaku, silakan login ulang',
+      );
+    }
+
     if (payload.role === 'ADMIN') {
       const admin = await this.prisma.admin.findUnique({
         where: { id: payload.sub },
         select: { id: true, email: true },
       });
-      if (!admin) throw new UnauthorizedException('Sesi admin tidak valid');
+      if (!admin) {
+        await this.refreshTokenService.revokeFamily(consumed.familyId);
+        throw new UnauthorizedException('Sesi admin tidak valid');
+      }
 
-      return this.generateTokenPair({
-        sub: admin.id,
+      return this.issueTokenPair({
+        subjectId: admin.id,
+        owner: 'ADMIN',
         email: admin.email,
-        role: 'ADMIN',
+        familyId: consumed.familyId,
       });
     }
 
     if (payload.role === 'VISITOR') {
       const visitor = await this.prisma.visitor.findUnique({
         where: { id: payload.sub },
+        select: { id: true },
       });
-      if (!visitor) throw new UnauthorizedException('Sesi visitor tidak valid');
+      if (!visitor) {
+        await this.refreshTokenService.revokeFamily(consumed.familyId);
+        throw new UnauthorizedException('Sesi visitor tidak valid');
+      }
 
-      return this.generateTokenPair({ sub: visitor.id, role: 'VISITOR' });
+      return this.issueTokenPair({
+        subjectId: visitor.id,
+        owner: 'VISITOR',
+        familyId: consumed.familyId,
+      });
     }
 
-    this.logger.warn(`Role token tidak dikenali: ${payload.role}`);
+    await this.refreshTokenService.revokeFamily(consumed.familyId);
+    this.logger.warn(`Role token tidak dikenali: ${String(payload.role)}`);
     throw new UnauthorizedException('Role token tidak dikenali');
+  }
+
+  async revokeRefreshToken(refreshToken?: string): Promise<void> {
+    if (!refreshToken) return;
+
+    try {
+      const payload = this.jwtService.verify<{ type?: string }>(refreshToken, {
+        secret: this.refreshSecret,
+      });
+      if (payload.type !== 'refresh') return;
+    } catch {
+      return;
+    }
+
+    const consumed = await this.refreshTokenService.consume(refreshToken);
+    if (consumed) {
+      await this.refreshTokenService.revokeFamily(consumed.familyId);
+    }
   }
 
   async getAdminProfile(userId: string): Promise<AdminPayload> {
@@ -180,24 +224,60 @@ export class AuthService {
     return this.allowedRedirectOrigins[0];
   }
 
-  private generateTokenPair(payload: {
-    sub: string;
-    role: string;
+  get refreshTokenTtlMs(): number {
+    return AuthService.parseDurationMs(this.refreshTokenExpiresIn);
+  }
+
+  private async issueTokenPair(params: {
+    subjectId: string;
+    owner: TokenOwner;
     email?: string;
-  }): TokenPair {
-    const accessToken = this.jwtService.sign(
-      { ...payload, type: 'access' },
-      { expiresIn: this.accessTokenExpiresIn as any },
+    familyId?: string;
+  }): Promise<TokenPair> {
+    const { subjectId, owner, email, familyId } = params;
+
+    const accessToken: string = this.jwtService.sign(
+      { sub: subjectId, role: owner, ...(email && { email }), type: 'access' },
+      { expiresIn: this.accessTokenExpiresIn as unknown as number },
     );
 
-    const refreshToken = this.jwtService.sign(
-      { sub: payload.sub, role: payload.role, type: 'refresh' },
+    const refreshToken: string = this.jwtService.sign(
+      { sub: subjectId, role: owner, type: 'refresh' },
       {
-        expiresIn: this.refreshTokenExpiresIn as any,
+        expiresIn: this.refreshTokenExpiresIn as unknown as number,
         secret: this.refreshSecret,
       },
     );
 
+    await this.refreshTokenService.persist({
+      token: refreshToken,
+      owner,
+      subjectId,
+      familyId: familyId ?? this.refreshTokenService.newFamilyId(),
+      expiresAt: new Date(Date.now() + this.refreshTokenTtlMs),
+    });
+
     return { accessToken, refreshToken };
+  }
+
+  static parseDurationMs(value: string): number {
+    const match = /^(\d+)\s*(ms|s|m|h|d|w)?$/.exec(value.trim());
+    if (!match) {
+      throw new Error(`Format durasi tidak valid: "${value}"`);
+    }
+
+    const amount = Number(match[1]);
+    const unit = match[2] ?? 's';
+
+    const multipliers: Record<string, number> = {
+      ms: 1,
+      s: 1000,
+      m: 60 * 1000,
+      h: 60 * 60 * 1000,
+      d: 24 * 60 * 60 * 1000,
+      w: 7 * 24 * 60 * 60 * 1000,
+    };
+
+    return amount * multipliers[unit];
   }
 }

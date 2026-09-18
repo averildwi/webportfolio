@@ -6,11 +6,18 @@ export const baseEnvSchema = Joi.object({
   NODE_ENV: Joi.string()
     .valid('development', 'production', 'test')
     .default('development'),
-  FRONTEND_URL: Joi.string().default('http://localhost:3000'),
+  FRONTEND_URL: Joi.string().required(),
 
-  JWT_SECRET: Joi.string().min(16).required(),
+  JWT_SECRET: Joi.string().min(32).required(),
   JWT_EXPIRES_IN: Joi.string().default('15m'),
-  JWT_REFRESH_SECRET: Joi.string().min(16).required(),
+  JWT_REFRESH_SECRET: Joi.string()
+    .min(32)
+    .required()
+    .invalid(Joi.ref('JWT_SECRET'))
+    .messages({
+      'any.invalid':
+        'JWT_REFRESH_SECRET harus berbeda dari JWT_SECRET, kalau sama refresh token bisa dipakai sebagai access token',
+    }),
   JWT_REFRESH_EXPIRES_IN: Joi.string().default('7d'),
 
   ADMIN_EMAIL: Joi.string().email().optional(),
